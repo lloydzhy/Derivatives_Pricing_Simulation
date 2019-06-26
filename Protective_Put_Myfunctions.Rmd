@@ -1,0 +1,115 @@
+# N. K. Chidambaran
+# Simulation Applications
+# Protective Put Strategy
+# Uses Functions defined in "Myfunctions.r" stored in RWork Directory
+#
+```{r}
+source("~/Documents/R_Work/MYfunctions.R")
+#
+#
+# Call Normal Random Number Generator
+# INPUT: SEED and NUMRAN
+#
+seed<-0
+numran<-1000000
+rand_norm_c<-MYNORM(seed,numran)
+hist(rand_norm_c,xlim=c(-5,5),breaks=20,freq=F)
+curve(dnorm(x, mean=0, sd=1),from=-4, to=4,add=TRUE,lwd=2)
+```
+```{r}
+#
+# Protective Puts Price Paths 
+#
+strike_vals<-c(0.95,1.05)
+drift_vals<-c(0.08,0.12)
+Volatility_vals<-c(0.2,0.3)
+tcount<-1
+scount<-1
+results<-matrix(rep(0),nrow=10,ncol=9)
+for (scount in 1:2) {
+strike<-strike_vals[scount]
+for (dcount in 1:2) {
+drift<-drift_vals[dcount]
+for (vcount in 1:2) {
+Volatility<-Volatility_vals[vcount]
+S0<-100
+rf<-0.05
+T<-1/12
+numpath<-10000
+PPut_Rets<-rep(0,numpath)
+St_Ret<-rep(0,numpath)
+jcount<-1
+lcount<-1
+while (jcount <= numpath) {
+  S_t<-S0
+# Initiate the Rollovers
+  k0<-as.integer(S0*strike)
+  m0<-2/12
+  PPut_Val<--(MYBSPut(S0,k0,rf,m0,Volatility))
+# Rollover over monthly prices for 1-year
+    for (kcount in 1:12) {
+    S_t1<-S_t*(exp(drift*T+Volatility*sqrt(T)*rand_norm_c[lcount]))
+    # 1 month option at old strike
+    kt<-as.integer(S_t*strike)
+    mt<-1/12
+    PP_t <- MYBSPut(S_t1,kt,rf,mt,Volatility)
+    # 2 month option at new strike
+    kt1<-as.integer(S_t1*strike)
+    mt1<-2/12
+    PP_t1 <- MYBSPut(S_t1,kt1,rf,mt1,Volatility)
+    if (kcount > 11) {
+      PPut_Val <- PPut_Val*exp(rf/12)+PP_t+S_t1
+      PPut_Rets[jcount]<-log(PPut_Val/S0)
+      St_Ret[jcount]<-log(S_t1/S0)
+      if(PPut_Val < 0) {cat("1",PPut_Val,S_t1,mt1,kt,kt1,PP_t,PP_t1,"\n")}
+      }
+    if (kcount < 12) {
+      PPut_Val <- PPut_Val*exp(+rf*1/12)+(PP_t-PP_t1)
+      }
+#    cat("1",S_t,S_t1,kt,kt1,PP_t,PP_t1,"\n")
+# Reset values for strike and Stock Price
+    S_t<-S_t1
+    }
+  jcount<-jcount+1
+  lcount<-lcount+1
+}
+#
+# Store Results for the Protective Put Strategies
+#
+results[1,tcount]<-strike
+results[2,tcount]<-drift
+results[3,tcount]<-Volatility
+results[4,tcount]<-mean(PPut_Rets)
+results[5,tcount]<-sd(PPut_Rets)
+results[6,tcount]<-quantile(PPut_Rets,0.05)
+results[7,tcount]<-quantile(PPut_Rets,0.25)
+results[8,tcount]<-quantile(PPut_Rets,0.55)
+results[9,tcount]<-quantile(PPut_Rets,0.75)
+results[10,tcount]<-quantile(PPut_Rets,0.95)
+tcount<-tcount+1
+}
+}
+}
+#
+# Store Results for the Stock Alone
+#
+tcount
+results[4,tcount]<-mean(St_Ret)
+results[5,tcount]<-sd(St_Ret)
+results[6,tcount]<-quantile(St_Ret,0.05)
+results[7,tcount]<-quantile(St_Ret,0.25)
+results[8,tcount]<-quantile(St_Ret,0.55)
+results[9,tcount]<-quantile(St_Ret,0.75)
+results[10,tcount]<-quantile(St_Ret,0.95)
+#
+# Below is the returns when modeling S(T)
+# with time discretization, log-normal case
+#
+# Sample Output Histograms
+#
+hist(PPut_Rets,breaks=20)
+hist(St_Ret, breaks=20)
+results
+
+#
+```

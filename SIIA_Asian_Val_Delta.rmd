@@ -1,0 +1,100 @@
+# Simulation Applications
+# N. K. Chidambaran
+#
+# Heding an Asian Call
+# Example: Citi SIIA - Embedded Asian Option
+#
+# Stock Index Insured Account
+#
+# Note: Payoff of the embedded option is expressed as a return on the
+# initia deposit (10,000).  So the payoff is a function of the month-
+# end average of the S&P 500, the initial value of the S&P 500 and the
+# initial deposit. Assume the initial value of the S&P to be S0,
+# the initial investment to be 10,000, and keep in mind that that
+# the return is multiplied by 2.  Then the adjustment factor to the 
+# standard Asian payoff max(S_Avg-S0,0), is equal to (2*10,000/S0).
+#
+# dY(theta)/d(S(0)) needed for calculating the pathwise estimate of
+# delta, has to be appropriately calculated taking into account the 
+# adjustment factor.
+# 
+# ******* This program does NOT do Delta hedging ********
+#
+```{r}
+MYSIIA_Delta<-function (seed,Initial_Value,S0,divyield,Strike,rf,Volatility,MMaturity,S_Past,S_t){
+# BEGIN ASIAN PRICING
+# S_Past - Older values of S
+# MMaturity - Months of maturity remaining
+#
+source("~/Documents/R_Work/MYfunctions.R")
+# Simulation parameters and variable initialization
+# Simulate S&P Values at the end of each month, ie.
+# 12 observations a year and Delta T = 1 month
+#
+DeltaT=1/12
+TMaturity<-MMaturity/12
+numpath<-100
+numran<-numpath*60
+#
+# Call Normal Random Number Generator
+# INPUT: SEED and NUMRAN
+#
+rand_norm_c<-MYNORM(seed,numran)
+#hist(rand_norm_c,xlim=c(-5,5),breaks=20,freq=F)
+#curve(dnorm(x, mean=0, sd=1),from=-4, to=4,add=TRUE,lwd=2)
+#
+# Sample numpath times
+#
+St_Avg_Vals<-rep(0,numpath)
+SIIA_Vals<-rep(0,numpath)
+Option_Payoff<-rep(0,numpath)
+Option_Delta<-rep(0,numpath)
+hedgePL<-0
+jcount<-1
+lcount<-1
+while(jcount <= numpath) {
+#
+# Simulate monthly prices
+# Loop MMaturity times per path to calculate SIIA Val and delta
+#
+  St<-S_t
+  St_Avg<-S_Past
+  for (kcount in 1:MMaturity) {
+  St<-St*(exp((rf-divyield-0.5*(Volatility^2))*DeltaT+Volatility*sqrt(DeltaT)*rand_norm_c[lcount]))
+    St_Avg<-St_Avg+St
+    lcount<-lcount+1
+  }
+  St_Avg<-(St_Avg)/60
+  St_Avg_Vals[jcount]<-St_Avg
+  #
+  # Payoff of option is equal to payoff of a standard Asian Call
+  # plus an adjustment factor
+  #
+  Option_Payoff[jcount]<-max((St_Avg-S0)*(2*10000/S0),0)*exp(-rf*TMaturity)
+  Option_Delta[jcount]<-0
+  if(Option_Payoff[jcount] > 0) {
+  Option_Delta[jcount]<-exp(-rf*TMaturity)*(St_Avg/S0)*(2*10000/S0)
+  }
+  SIIA_Ret<-2*max((St_Avg-S0)/S0,0)
+  SIIA_Vals[jcount]<-Initial_Value+Initial_Value*SIIA_Ret
+  # cat("OptVal",jcount,"\n")
+  #if(MMaturity==1) cat("St",jcount,S_Past,St,St_Avg,Option_Payoff[jcount],Option_Delta[jcount],"\n")
+  jcount=jcount+1
+  }
+FV_SIIA<-mean(SIIA_Vals[1:numpath])
+PV_SIIA<-exp(-rf*TMaturity)*mean(SIIA_Vals[1:numpath])
+PV_Bond<-exp(-rf*TMaturity)*10000
+Asian_Val<-mean(Option_Payoff)
+Asian_Delta<-mean(Option_Delta)
+#Asian_Val2<-PV_SIIA-PV_Bond
+#
+# END ASIAN VAL AND DELTA FUNCTION
+SIIA_Vals<-rep(0,2)
+SIIA_Vals[1]<-Asian_Val
+SIIA_Vals[2]<-Asian_Delta
+#cat("Asian",St,S_Past,Asian_Val,Asian_Delta,"\n")
+#if (MMaturity==1) cat("ST",numpath,Asian_Val,Asian_Delta,"\n")
+return(SIIA_Vals)
+}
+```
+
