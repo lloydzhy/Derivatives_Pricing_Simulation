@@ -1,0 +1,493 @@
+
+#title: "Bermudan Put Pricing"
+#class: Simulation Application
+
+
+```{r}
+# Random number generator
+MYUNIFORM <- function(inputvar)
+{
+  idum <- inputvar[1]
+  numran <- inputvar[2]
+  IM1 <- 2147483563
+  IM2 <- 2147483399
+  IMM1 <- IM1-1
+  IA1 <- 40014
+  IA2 <- 40692
+  IQ1 <- 53668 
+  IQ2 <- 52774
+  IR1 <- 12211
+  IR2 <- 3791
+  NTAB <- 32
+  NDIV <- as.integer(1+IMM1/NTAB)
+  AM=1.0/IM1
+  EPS=1.2e-7
+  RNMX=1.-EPS
+  iv=rep(0,NTAB)
+  idum2 <- 123456789
+  iy <- 0
+  ranx <- rep(0,numran)
+  icount <- 1
+  for (icount in 1:numran)
+  {
+    if (idum<=0)
+    {
+      idum<-max(-idum,1)
+      idum2 <- idum
+      j<-NTAB+8
+      while (j>0)
+      {
+        k <- as.integer(idum/IQ1)
+        idum<-IA1*(idum-k*IQ1)-k*IR1
+        if (idum<0){idum <- idum+IM1}
+        if(j<= NTAB){iv[j] <- idum}
+        j <- j-1
+      }
+      iy <- iv[1]
+    }
+    k<-as.integer(idum/IQ1)
+    idum<-IA1*(idum-k*IQ1)-k*IR1
+    if (idum<0) {idum <- idum+IM1}
+    k<-as.integer(idum2/IQ2)
+    idum2<-IA2*(idum2-k*IQ2)-k*IR2
+    if (idum2<0) {idum2 <- idum2+IM2}
+    j<-as.integer(iy/NDIV)+1
+    iy<-iv[j]-idum2
+    iv[j]<-idum
+    if (iy<1) {iy<-iy+IMM1}
+    ran2<-min(AM*iy,RNMX)
+    ranx[icount]<-ran2
+    icount<-icount+1
+  }
+  
+  return(ranx)
+}
+```
+
+
+```{r}
+# Normal dist generator
+MYNORM <- function(ran_c)
+{
+  a0 <- 2.50662823884
+  a1 <- -18.61500062529
+  a2 <- 41.39119773534
+  a3 <- -25.44106049637
+
+  b0 <- -8.47351093090
+  b1 <- 23.08336743743
+  b2 <- -21.06224101826
+  b3 <- 3.13082909833
+  
+  c0 <- 0.3374754822726147
+  c1 <- 0.9761690190917186
+  c2 <- 0.1607979714918209
+  c3 <- 0.0276438810333863
+  c4 <- 0.0038405729373609
+  c5 <- 0.0003951896511919
+  c6 <- 0.0000321767881768
+  c7 <- 0.0000002888167364
+  c8 <- 0.0000003960315187
+  
+  jcount <- 1
+  numran <- inputvar[2]
+  ran_norm_c <- rep(0,numran)
+  while(jcount <= numran)
+  {
+    u <- ran_c[jcount]
+    y <- u-0.5
+    if(abs(y)<0.42)
+    {
+      r <- y*y
+      x <- y*(((a3*r+a2)*r+a1)*r+a0)/((((b3*r+b2)*r+b1)*r+b0)*r+1)
+    }
+    else
+    {
+      r <- u
+      if(y>0){r <- 1-u}
+      r <- log(-log(r))
+      x <- c0+r*(c1+r*(c2+r*(c3+r*(c4+r*(c5+r*(c6+r*(c7+r*c8)))))))
+      if(y<0){x <- -x}
+    }
+    ran_norm_c[jcount] <- x
+    jcount <- jcount+1
+  } 
+  return(ran_norm_c)
+}
+```
+
+```{r}
+seed <- 0
+numran <- 500000
+inputvar <- c(seed,numran)
+ran_uniform_c <- MYUNIFORM(inputvar)
+rand_norm <- MYNORM(ran_uniform_c)
+#seed <- 1000
+#numran <- 500000
+#inputvar <- c(seed,numran)
+#ran_uniform_c <- MYUNIFORM(inputvar)
+#rand_norm2 <- MYNORM(ran_uniform_c)
+```
+
+
+```{r}
+op_eu=function(rf,T,K,S,Vol)
+{
+d1 <- (log(S/K)+(rf+0.5*Vol*Vol)*T)/(Vol*sqrt(T))
+d2 <- d1-Vol*sqrt(T)
+Nd1 <- pnorm(d1,mean=0,sd=1)
+Nd2 <- pnorm(d2,mean=0,sd=1)
+P <- K*exp(-rf*T)*(1-Nd2)-S0*(1-Nd1)
+return(P)
+}
+op_eu(0.02,12/12,95,100,0.3)  
+```
+
+```{r}
+comparison=function(S,fv,K,rf,mtm,numran,flag)
+{
+max_value=rep(0,numran)
+
+#for (i in 1:10){
+#  exercise_value[i]=max(K-S[i],0)
+#}
+
+fv_disc=pmax(K-fv,0)*exp(-rf*mtm/12)
+#print(fv_disc)
+
+nz_S=rep(0,numran)
+nz_fv_disc=rep(0,numran)
+index_list=rep(0,numran)
+
+i=1
+counter=0
+exercise_value=pmax(K-S,0)
+while(i<=numran){
+ # print(exercise_value[i])
+  if (exercise_value[i]!= 0){
+    counter=counter+1
+    index_list[counter]=i
+    nz_S[counter]=S[i]
+    nz_fv_disc[counter]=fv_disc[i]
+  
+  }
+  i=i+1
+}
+
+nz_S=nz_S[1:counter]
+nz_fv_disc=nz_fv_disc[1:counter]
+#print(nz_S)
+
+if (flag ==0){
+  #print(0)
+regression=lm(nz_fv_disc~nz_S+I(nz_S^2))
+a=coef(regression)[1]
+b=coef(regression)[2]
+c=coef(regression)[3] 
+
+continue_value=rep(0,numran)
+
+i=1
+while(i<=numran){
+  continue_value[index_list[i]]=a+b*S[index_list[i]]+c*S[index_list[i]]^2
+  if (continue_value[i]<exercise_value[i]){
+    max_value[i]=exercise_value[i]*exp(rf*mtm/12)
+  }
+  if (continue_value[i]>=exercise_value[i]){
+    max_value[i]=fv_disc[i]*exp(rf*mtm/12)
+  }
+  i=i+1
+ }
+}
+#print(continue_value)
+if (flag==1){
+  #print(1)
+  regression=lm(nz_fv_disc~nz_S+I(nz_S^2)+I(nz_S^3))
+  a=coef(regression)[1]
+  b=coef(regression)[2]
+  c=coef(regression)[3] 
+  d=coef(regression)[4]
+  continue_value=rep(0,numran)
+
+i=1
+max_value=rep(0,numran)
+while(i<=numran){
+  continue_value[index_list[i]]=a+b*S[index_list[i]]+c*S[index_list[i]]^2+d*S[index_list[i]]^3
+  if (continue_value[i]<exercise_value[i]){
+    max_value[i]=exercise_value[i]*exp(rf*mtm/12)
+
+  }
+  if (continue_value[i]>=exercise_value[i]){
+    max_value[i]=fv_disc[i]*exp(rf*mtm/12)
+
+  }
+  i=i+1
+ }
+}
+
+
+
+
+
+
+#max_value=pmax(exercise_value*exp(rf*mtm/12),continue_value*exp(rf*mtm/12))
+  #print(continue_value)
+  #print(0110)
+  #print(exercise_value)
+
+  
+  return(max_value)
+}
+aaa=comparison(c(54.347,60.81,58.316,53.004,63.232,59.327,57.083),c(51.032,59.763,58.020,51.17,61.9,61.732,62.203),60,0.091,1,7,0)
+
+
+```
+
+
+
+
+
+
+```{r}
+op_am=function(rf,T,K,S,Vol,flag)
+{
+jcount <- 1
+numran <- 10000
+ST_Vals <- matrix(0,nrow=numran,ncol=T*12)
+
+while (jcount<=numran)
+{
+  month=1
+  
+  while(month<=T*12){
+    #ST_path
+    
+    if (month==1){
+         ST_Vals[jcount,month]=S*exp((rf-0.5*Vol*Vol)/12+Vol*sqrt(1/12)*rand_norm[(jcount+10000)*T*12+month])
+    }
+    else{
+         ST_Vals[jcount,month]=ST_Vals[jcount,month-1]*exp((rf-0.5*Vol*Vol)/12+Vol*sqrt(1/12)*rand_norm[(jcount+10000)*T*12+month])
+
+
+    }
+    month=month+1
+  }
+
+  jcount = jcount+1
+}
+future_value=ST_Vals[,T*12]
+value=pmax(K-future_value,0)
+#print(value)
+#print(mean(value)*exp(-rf*T))
+#print(ST_Vals[,12*T])
+#print(mean(value)*exp(-rf*T))
+
+
+
+i=1
+while(i<=T*12-1){ 
+  moneyness=pmax(ST_Vals[,T*12-i],K)
+  itm_index=which(K== moneyness)
+
+  m=1
+  itm_ST_Vals=rep(0,numran)
+  future_value_new=rep(0,numran)
+  counter=1
+  while(m<=numran){
+    if(m %in% itm_index){
+      itm_ST_Vals[counter]=ST_Vals[m,T*12-i]
+      #print(itm_ST_Vals[counter])     
+      future_value_new[counter]=future_value[m]
+      counter=counter+1
+    }
+
+    m=m+1
+  }
+  itm_ST_Vals=itm_ST_Vals[1:counter-1]
+  future_value_new=future_value_new[1:counter-1]
+
+    
+    value_comparison=comparison(itm_ST_Vals,future_value_new,K,rf,i,counter-1,flag)
+   #print(itm_ST_Vals)
+   #print(111)
+   #print(future_value_new)
+   #print(222)
+   #print(value_comparison)
+  value_new=rep(0,numran)
+  t=1
+  counter=1
+  while(t<=numran){
+    if(t %in% itm_index){
+      value_new[t]=value_comparison[counter]
+      #print(111)
+      counter=counter+1
+    }
+    else{
+      value_new[t]=0
+    }
+    #print(value_new[t])
+    t=t+1
+  }
+    
+    #value.copy=value
+    value=pmax(value,value_new)
+    #print(value.copy-value)
+  i=i+1
+
+}
+#print(ST_Vals[1:10,])
+#print(value[1:10])
+#print(value)
+return(mean(value)*exp(-rf*T))
+}
+
+op_am(0.02,12/12,95,100,0.3,0)  
+```
+
+
+
+```{r}
+op_Bermudan=function(rf,T,K,S,Vol,eu_month,am_month,flag)
+{
+jcount <- 1
+numran <- 10000
+ST_Vals <- matrix(0,nrow=numran,ncol=T*12)
+
+while (jcount<=numran)
+{
+  month=1
+  
+  while(month<=T*12){
+    #ST_path
+    
+    if (month==1){
+         ST_Vals[jcount,month]=S*exp((rf-0.5*Vol*Vol)/12+Vol*sqrt(1/12)*rand_norm[(jcount+10000)*T*12+month])
+    }
+    else{
+         ST_Vals[jcount,month]=ST_Vals[jcount,month-1]*exp((rf-0.5*Vol*Vol)/12+Vol*sqrt(1/12)*rand_norm[(jcount+10000)*T*12+month])
+
+
+    }
+    month=month+1
+  }
+
+  jcount = jcount+1
+}
+future_value=ST_Vals[,T*12]
+value=pmax(K-future_value,0)
+#print(future_value[1:20])
+
+
+
+i=eu_month+1
+while(i<=T*12-1){ 
+  moneyness=pmax(ST_Vals[,T*12-i],K)
+  itm_index=which(K== moneyness)
+
+  m=1
+  itm_ST_Vals=rep(0,numran)
+  future_value_new=rep(0,numran)
+  counter=1
+  while(m<=numran){
+    if(m %in% itm_index){
+      itm_ST_Vals[counter]=ST_Vals[m,T*12-i]
+      #print(itm_ST_Vals[counter])     
+      future_value_new[counter]=future_value[m]
+      counter=counter+1
+    }
+
+    m=m+1
+  }
+  itm_ST_Vals=itm_ST_Vals[1:counter-1]
+  future_value_new=future_value_new[1:counter-1]
+
+    
+    value_comparison=comparison(itm_ST_Vals,future_value_new,K,rf,i,counter-1,flag)
+   #print(itm_ST_Vals)
+   #print(111)
+   #print(future_value_new)
+   #print(222)
+   #print(value_comparison)
+  value_new=rep(0,numran)
+  t=1
+  counter=1
+  while(t<=numran){
+    if(t %in% itm_index){
+      value_new[t]=value_comparison[counter]
+      #print(111)
+      counter=counter+1
+    }
+    else{
+      value_new[t]=0
+    }
+    #print(value_new[t])
+    t=t+1
+  }
+    
+    #value.copy=value
+    value=pmax(value,value_new)
+    #print(value.copy-value)
+  i=i+1
+
+}
+#print(ST_Vals[1:10,])
+#print(value[1:10])
+#print(value)
+return(mean(value)*exp(-rf*T))
+}
+
+
+op_Bermudan(0.02,12/12,95,100,0.3,0,12,0)  
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+op_Bermudan=function(rf,T,K,S,vol,eu_month,am_month)
+{
+jcount <- 1
+numran <- 10000
+
+
+while (jcount<=numran)
+{
+  month=1
+  
+  while(month<=T*12){
+    #ST_path
+    
+    if (month==1){
+         ST_Vals[jcount,month]=S*exp((rf-0.5*Vol*Vol)/12+Vol*sqrt(1/12)*rand_norm[(jcount+10000)*T*12+month])
+    }
+    else{
+         ST_Vals[jcount,month]=ST_Vals[jcount,month-1]*exp((rf-0.5*Vol*Vol)/12+Vol*sqrt(1/12)*rand_norm[(jcount+10000)*T*12+month])
+
+
+    }
+    month=month+1
+  }
+
+  jcount = jcount+1
+}
+
+
+  return()
+}
+  
+```
+
